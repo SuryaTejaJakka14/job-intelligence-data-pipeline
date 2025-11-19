@@ -1,15 +1,13 @@
 """
-Main file using PARALLEL scraping with ADVANCED SCHEDULING.
-- Runs every 30 minutes
-- Only during specified time periods (e.g., 9 AM - 6 PM)
-- Auto-resets CSV after midnight
-- Tracks daily limits
+Main file using PARALLEL scraping for faster job processing.
 """
 
+import schedule
 import time
 import logging
+import pandas as pd
 from datetime import datetime
-from scraper_parallel import scrape_jobs_parallel
+from scraper_parallel import scrape_jobs_parallel  # ← Import parallel version
 from email_sender import send_application
 from database import (
     initialize_database,
@@ -24,16 +22,6 @@ from config import (
     MAX_APPLICATIONS_PER_DAY,
     DRY_RUN
 )
-from scheduler_config import (
-    schedule_bot,
-    should_run_now,
-    is_within_working_hours,
-    use_preset_business_hours,
-    use_preset_extended_hours,
-    use_preset_24_7,
-    SCHEDULING_ENABLED
-)
-import pandas as pd
 
 logging.basicConfig(
     filename='logs/app.log',
@@ -61,7 +49,6 @@ def process_applications_parallel(max_workers=3):
     today_count = get_todays_application_count()
     if today_count >= MAX_APPLICATIONS_PER_DAY:
         print(f"⚠ Daily limit reached ({today_count}/{MAX_APPLICATIONS_PER_DAY})")
-        print(f"Will reset at midnight.")
         return
     
     print(f"Applications sent today: {today_count}/{MAX_APPLICATIONS_PER_DAY}\n")
@@ -103,8 +90,6 @@ def process_applications_parallel(max_workers=3):
     
     for job in filtered_jobs:
         if get_todays_application_count() >= MAX_APPLICATIONS_PER_DAY:
-            print(f"\n⚠ Daily limit reached during cycle ({MAX_APPLICATIONS_PER_DAY})")
-            print(f"Will resume at next scheduled time or after midnight reset.")
             break
         
         print(f"→ {job['title'][:50]}")
@@ -124,57 +109,37 @@ def process_applications_parallel(max_workers=3):
     print(f"Unique jobs: {len(filtered_jobs)}")
     print(f"Applications sent: {total_applied}")
     print(f"Scraping time: {scrape_time:.1f} seconds")
-    
-    # Overall statistics
-    stats = get_application_stats()
-    print(f"\nOverall Statistics (All Time):")
-    print(f"  Total applications: {stats['total']}")
-    print(f"  Successfully sent: {stats['sent']}")
-    print(f"  Failed: {stats['failed']}")
-    print(f"  Unique emails contacted: {stats['unique_emails']}")
     print(f"{'='*70}\n")
     
     logging.info(f"Parallel cycle complete: {total_applied} sent in {scrape_time:.1f}s scrape time")
 
 def run_once_parallel():
-    """Run once with parallel scraping (for testing)."""
-    print("\n🤖 Running Job Application Bot (PARALLEL MODE - ONCE)\n")
-    process_applications_parallel(max_workers=3)
+    """Run once with parallel scraping."""
+    print("\n🤖 Running Job Application Bot (PARALLEL MODE)\n")
+    process_applications_parallel(max_workers=3)  # 3 parallel threads
 
 def run_scheduled_parallel():
-    """Run scheduled with parallel scraping and advanced scheduling."""
-    print("\n🤖 Job Application Bot Started (PARALLEL MODE - SCHEDULED)\n")
+    """Run scheduled with parallel scraping."""
+    print("\n🤖 Job Application Bot Started (PARALLEL MODE)")
+    print("📅 Schedule: Every 2 hours")
+    print("⚙️  Parallel Workers: 3")
+    print("⏹ Press Ctrl+C to stop\n")
     
-    # Pass the process function to the scheduler
-    schedule_bot(process_applications_parallel)
-
-def show_schedule_status():
-    """Display current scheduling status."""
-    print("\n" + "="*70)
-    print("SCHEDULING STATUS")
-    print("="*70)
-    print(f"Scheduling Enabled: {'YES' if SCHEDULING_ENABLED else 'NO'}")
-    print(f"Current Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S (%A)')}")
-    print(f"Within Working Hours: {'YES' if is_within_working_hours() else 'NO'}")
-    print(f"Should Run Now: {'YES' if should_run_now() else 'NO'}")
-    print("="*70 + "\n")
+    process_applications_parallel(max_workers=3)
+    schedule.every(2).hours.do(process_applications_parallel, max_workers=3)
+    
+    logging.info("Scheduler started - parallel mode, every 2 hours")
+    
+    try:
+        while True:
+            schedule.run_pending()
+            time.sleep(60)
+    except KeyboardInterrupt:
+        print("\n\n⏹ Bot stopped by user")
 
 if __name__ == "__main__":
-    # ============================================================
-    # CHOOSE YOUR MODE - UNCOMMENT ONE OF THESE
-    # ============================================================
+    # Run once with parallel scraping
+    run_once_parallel()
     
-    # Mode 1: RUN ONCE (for testing)
-    #run_once_parallel()
-    
-    # Mode 2: RUN WITH SCHEDULING (24/7 automation)
-    use_preset_business_hours()  # Optional: set working hours
-    run_scheduled_parallel()
-    
-    # Mode 3: SHOW STATUS AND DECIDE
-    # show_schedule_status()
-    # if should_run_now():
-    #     print("✓ Within working hours - running now...\n")
-    #     process_applications_parallel(max_workers=3)
-    # else:
-    #     print("⊘ Outside working hours - not running.")
+    # Or uncomment for scheduled:
+    # run_scheduled_parallel()

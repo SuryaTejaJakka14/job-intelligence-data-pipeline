@@ -1,5 +1,5 @@
 """
-Configuration file for job application bot.
+Configuration file for Workday job application bot.
 Update these settings according to your needs.
 """
 
@@ -10,14 +10,14 @@ import os
 # ============================================================
 
 # Gmail credentials
-SENDER_EMAIL = "surya.jakka14@gmail.com"
-SENDER_PASSWORD = "szvalslnccosmclt"  # ← UPDATE THIS
+SENDER_EMAIL = "stjakka14@gmail.com"
+SENDER_PASSWORD = "cugkvqktmxexioim"  # ← UPDATE THIS
 
 # ============================================================
 # RESUME CONFIGURATION
 # ============================================================
 
-# Path to your resume file
+# Path to your resume file (UPDATE THIS TO YOUR WORKDAY RESUME)
 RESUME_PATH = "/Users/suryatejajakka/desktop/marketing_workday/Surya_Workday.docx"  # ← UPDATE THIS
 
 # ============================================================
@@ -36,7 +36,7 @@ DELAY_BETWEEN_EMAILS = 10
 
 # Set to True for testing (no emails sent)
 # Set to False for live mode (real emails sent)
-DRY_RUN = False  # ← Set to False when ready to go live
+DRY_RUN = True  # ← Set to False when ready to go live
 
 # ============================================================
 # PARALLEL SCRAPING CONFIGURATION
@@ -56,30 +56,36 @@ MAX_WORKERS = 3  # ← KEEP AT 1 TO AVOID CRASHES
 MAX_PAGES_TO_SCRAPE = 5
 
 # ============================================================
-# SEARCH CONFIGURATION
+# SEARCH CONFIGURATION - WORKDAY SPECIFIC
 # ============================================================
 
-# Keywords to search for jobs
-SEARCH_KEYWORDS = ['workday']
+# Keywords to search for Workday jobs
+SEARCH_KEYWORDS = [
+    'workday',
+]
 
 # Maximum pages to scrape per search keyword
 MAX_PAGES_PER_SEARCH = 5
 
 # ============================================================
-# JOB FILTERING
+# JOB FILTERING - WORKDAY SPECIFIC
 # ============================================================
 
 # Keywords to look for in job titles (leave empty [] to disable filtering)
+# 
+# IMPORTANT: For parallel scraper (scraper_parallel.py):
+#   - It scrapes ALL today's jobs, then filters by these keywords
+#   - Use specific keywords to avoid false matches (e.g., 'workday' not just 'developer')
+#
+# For search-based scraper (scraper.py):
+#   - It searches for SEARCH_KEYWORDS first, then filters by these
+#   - Can use broader keywords since search already narrows results
+#
 TARGET_KEYWORDS = [
-    'workday',
-    'consultant',
-    'developer',
-    'engineer',
-    'hcm',
-    'integration',
-    'senior',
-    'lead',
-    'architect'
+    'workday',      # Primary keyword - most jobs should have this
+    'hcm',          # Workday HCM
+    # Note: Generic keywords like 'developer', 'consultant' are removed
+    # to avoid matching non-Workday jobs in parallel scraper
 ]
 
 # Keywords to exclude from job titles

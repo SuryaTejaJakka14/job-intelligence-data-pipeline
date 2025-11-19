@@ -88,26 +88,20 @@ def should_run_now():
 
 def reset_daily_counter():
     """
-    Reset the daily application counter and database after midnight.
-    Creates a backup before resetting to preserve historical data.
+    Reset the daily application counter after midnight.
+    This allows the bot to send MAX_APPLICATIONS_PER_DAY again on the new day.
     """
     try:
-        from database import reset_database
+        from database import initialize_database
         
-        print(f"\n{'='*70}")
-        print(f"MIDNIGHT RESET - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"{'='*70}")
+        # This creates a fresh CSV if needed
+        initialize_database()
         
-        # Reset database (includes backup)
-        reset_database()
-        
-        logging.info("Daily database reset completed after midnight")
-        print(f"✓ Daily reset complete - fresh start for new day!")
-        print(f"{'='*70}\n")
+        logging.info("Daily counter reset after midnight")
+        print("✓ Daily counter reset - new day started!")
         
     except Exception as e:
-        logging.error(f"Error resetting daily database: {str(e)}")
-        print(f"✗ Error during daily reset: {str(e)}")
+        logging.error(f"Error resetting daily counter: {str(e)}")
 
 def schedule_bot(process_applications_func):
     """

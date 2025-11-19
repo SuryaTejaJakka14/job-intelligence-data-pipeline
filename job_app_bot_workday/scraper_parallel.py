@@ -1,14 +1,11 @@
 """
-Complete working scraper for jobs.nvoids.com
+Complete working scraper for jobs.nvoids.com - WORKDAY VERSION
 Converts IST timestamps to PST and filters for today's jobs only.
+Then filters by WORKDAY-specific keywords from config.py.
 INCLUDES AUTOMATIC CHROMEDRIVER UPDATES
 """
 
 from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
@@ -27,10 +24,7 @@ from config import (
     EXCLUDE_KEYWORDS,
     MIN_YEARS_EXPERIENCE,
     HEADLESS_BROWSER,
-    MAX_WORKERS,
-    SEARCH_KEYWORDS,
-    MAX_PAGES_PER_SEARCH,
-    BROWSER_WAIT_TIME
+    MAX_WORKERS
 )
 
 logging.basicConfig(
@@ -256,79 +250,6 @@ def is_relevant_job(title):
             return True
     return False
 
-def search_jobs_on_nvoids(driver, search_keyword):
-    """
-    Perform a search on jobs.nvoids.com using Selenium.
-    
-    Args:
-        driver: Selenium WebDriver instance
-        search_keyword: Keyword to search for (e.g., 'java developer')
-        
-    Returns:
-        bool: True if search was successful
-    """
-    try:
-        print(f"\n   Navigating to jobs.nvoids.com...")
-        driver.get("https://jobs.nvoids.com")
-        logging.info(f"Navigated to jobs.nvoids.com")
-        
-        # Wait for page to load
-        time.sleep(2)
-        
-        # Find the search box - try multiple possible selectors
-        print(f"   Looking for search box...")
-        search_box = None
-        
-        # Try common search input selectors
-        search_selectors = [
-            (By.NAME, "keyword"),
-            (By.NAME, "search"),
-            (By.ID, "keyword"),
-            (By.ID, "search"),
-            (By.CSS_SELECTOR, "input[type='text']"),
-            (By.CSS_SELECTOR, "input[placeholder*='search' i]"),
-            (By.CSS_SELECTOR, "input[placeholder*='keyword' i]"),
-            (By.XPATH, "//input[@type='text']"),
-        ]
-        
-        for selector_type, selector_value in search_selectors:
-            try:
-                search_box = WebDriverWait(driver, 5).until(
-                    EC.presence_of_element_located((selector_type, selector_value))
-                )
-                print(f"   ✓ Found search box using {selector_type}: {selector_value}")
-                break
-            except:
-                continue
-        
-        if not search_box:
-            logging.error("Search box not found on page")
-            print("   ✗ Could not find search box")
-            return False
-        
-        # Clear the search box and enter keyword
-        print(f"   Entering search keyword: '{search_keyword}'")
-        search_box.clear()
-        search_box.send_keys(search_keyword)
-        time.sleep(1)
-        
-        # Submit the search (press Enter)
-        print(f"   Submitting search...")
-        search_box.send_keys(Keys.RETURN)
-        
-        # Wait for results to load
-        time.sleep(3)
-        
-        logging.info(f"Search completed for keyword: {search_keyword}")
-        print(f"   ✓ Search results loaded")
-        
-        return True
-        
-    except Exception as e:
-        logging.error(f"Error performing search for '{search_keyword}': {str(e)}")
-        print(f"   ✗ Search error: {str(e)}")
-        return False
-
 def scrape_job_detail(job_url):
     """Scrape individual job detail page."""
     driver = None
@@ -385,21 +306,13 @@ def scrape_job_detail(job_url):
 
 def scrape_jobs_parallel(unused_url=None, max_workers=None):
     """
-    Scrape jobs using automated search with configurable keywords.
-    Uses SEARCH_KEYWORDS from config.py and parallel processing for job details.
-    
-    Args:
-        unused_url: Ignored (for compatibility)
-        max_workers: Number of parallel workers for scraping job details
-        
-    Returns:
-        list: Combined unique jobs from all search keywords
+    Scrape all jobs from the search page.
+    Filters for jobs posted TODAY in PST (converted from IST).
     """
     if max_workers is None:
         max_workers = MAX_WORKERS
     
     all_jobs = []
-    seen_job_ids = set()
     driver = None
     
     try:
@@ -408,118 +321,100 @@ def scrape_jobs_parallel(unused_url=None, max_workers=None):
         # ============================================================
         update_chromedriver_automatically()
         
+        today_pst = datetime.now(PST).date()
+        
         print(f"\n{'='*70}")
-        print(f"AUTOMATED JOB SEARCH BOT - PARALLEL MODE")
+        print(f"JOB SCRAPER - IST TO PST CONVERSION")
         print(f"{'='*70}")
-        print(f"Search Keywords: {SEARCH_KEYWORDS}")
-        print(f"Max Workers: {max_workers}")
-        print(f"Headless Mode: {HEADLESS_BROWSER}")
+        print(f"Target: https://jobs.nvoids.com/search_sph.jsp")
+        print(f"Today (PST): {today_pst}")
         print(f"{'='*70}\n")
         
-        # ============================================================
-        # SEARCH FOR EACH KEYWORD
-        # ============================================================
-        for keyword_idx, search_keyword in enumerate(SEARCH_KEYWORDS, 1):
-            print(f"\n🔍 Search {keyword_idx}/{len(SEARCH_KEYWORDS)}: '{search_keyword}'")
-            print(f"{'─'*70}")
+        driver = setup_driver()
+        driver.get("https://jobs.nvoids.com/search_sph.jsp")
+        time.sleep(3)
+        
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        
+        tables = soup.find_all('table')
+        print(f"Found {len(tables)} tables on page")
+        
+        if len(tables) < 2:
+            print("✗ Expected table not found")
+            return all_jobs
+        
+        job_table = tables[1] if len(tables) > 1 else tables[0]
+        rows = job_table.find_all('tr')
+        
+        print(f"Found {len(rows)} rows in job table\n")
+        
+        today_job_urls = []
+        
+        for row_idx, row in enumerate(rows[1:], 1):
+            cells = row.find_all('td')
             
-            try:
-                # Set up browser for this search
-                driver = setup_driver()
-                
-                # Perform search
-                search_success = search_jobs_on_nvoids(driver, search_keyword)
-                
-                if not search_success:
-                    print(f"   ✗ Search failed for '{search_keyword}', skipping...")
-                    driver.quit()
-                    driver = None
-                    continue
-                
-                # Get page source and parse
-                time.sleep(2)
-                soup = BeautifulSoup(driver.page_source, 'html.parser')
-                
-                # Extract job URLs from search results
-                job_urls = []
-                links = soup.find_all('a', href=re.compile(r'job_details'))
-                
-                for link in links:
-                    href = link.get('href')
-                    if href:
-                        if href.startswith('job_details'):
-                            full_url = f"https://jobs.nvoids.com/{href}"
-                        elif href.startswith('/'):
-                            full_url = f"https://jobs.nvoids.com{href}"
-                        else:
-                            full_url = href
-                        
-                        if full_url not in job_urls:
-                            job_urls.append(full_url)
-                
-                print(f"   Found {len(job_urls)} job postings for '{search_keyword}'")
-                
-                if not job_urls:
-                    print(f"   No jobs found for this keyword")
-                    driver.quit()
-                    driver = None
-                    continue
-                
-                # Close the search browser
-                driver.quit()
-                driver = None
-                
-                # ============================================================
-                # PARALLEL SCRAPING OF JOB DETAILS
-                # ============================================================
-                print(f"   🔄 Scraping {len(job_urls)} jobs with {max_workers} workers...\n")
-                
-                keyword_jobs = []
-                with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    futures = {executor.submit(scrape_job_detail, url): url for url in job_urls}
-                    
-                    for idx, future in enumerate(as_completed(futures), 1):
-                        try:
-                            job = future.result()
-                            if job:
-                                # Check for duplicates across keywords
-                                if job['job_id'] not in seen_job_ids:
-                                    keyword_jobs.append(job)
-                                    seen_job_ids.add(job['job_id'])
-                                    print(f"   [{idx}/{len(job_urls)}] ✓ {job['title'][:45]}... - {job['email']}")
-                                else:
-                                    print(f"   [{idx}/{len(job_urls)}] ⊘ Duplicate: {job['title'][:45]}...")
-                        except Exception as e:
-                            logging.error(f"Error processing job: {str(e)}")
-                
-                all_jobs.extend(keyword_jobs)
-                print(f"\n   ✓ Added {len(keyword_jobs)} unique jobs from '{search_keyword}'")
-                print(f"   Total unique jobs so far: {len(all_jobs)}")
-                
-                # Wait between searches
-                if keyword_idx < len(SEARCH_KEYWORDS):
-                    print(f"\n   ⏱ Waiting before next search...")
-                    time.sleep(3)
-                    
-            except Exception as e:
-                logging.error(f"Error searching for '{search_keyword}': {str(e)}")
-                print(f"   ✗ Error: {str(e)}")
-                if driver:
-                    driver.quit()
-                    driver = None
+            if len(cells) < 3:
                 continue
+            
+            timestamp_cell = cells[-1].get_text(strip=True)
+            
+            if not is_today_pst_job(timestamp_cell):
+                continue
+            
+            links = row.find_all('a', href=re.compile(r'job_details'))
+            
+            for link in links:
+                href = link.get('href')
+                if href:
+                    if href.startswith('job_details'):
+                        full_url = f"https://jobs.nvoids.com/{href}"
+                    elif href.startswith('/'):
+                        full_url = f"https://jobs.nvoids.com{href}"
+                    else:
+                        full_url = href
+                    
+                    if full_url not in today_job_urls:
+                        today_job_urls.append(full_url)
         
-        # ============================================================
-        # FINAL SUMMARY
-        # ============================================================
+        print(f"\n{'─'*70}")
+        print(f"📋 Extracted {len(today_job_urls)} today's job URLs (PST)\n")
+        
+        if not today_job_urls:
+            print("✗ No today's jobs found")
+            return all_jobs
+        
+        print(f"🔄 Scraping {len(today_job_urls)} jobs with {max_workers} workers...\n")
+        
+        success = 0
+        filtered = 0
+        errors = 0
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(scrape_job_detail, url): url for url in today_job_urls}
+            
+            for idx, future in enumerate(as_completed(futures), 1):
+                try:
+                    job = future.result()
+                    if job:
+                        all_jobs.append(job)
+                        success += 1
+                        print(f"[{idx}/{len(today_job_urls)}] ✓ {job['title'][:50]}")
+                        print(f"                  {job['email']}\n")
+                    else:
+                        filtered += 1
+                except Exception as e:
+                    errors += 1
+        
         print(f"\n{'='*70}")
-        print(f"ALL SEARCHES COMPLETE")
+        print(f"SCRAPING COMPLETE - TODAY'S JOBS (PST)")
         print(f"{'='*70}")
-        print(f"Keywords searched: {len(SEARCH_KEYWORDS)}")
-        print(f"Total unique jobs: {len(all_jobs)}")
+        print(f"✓ Success: {success}")
+        print(f"⊘ Filtered: {filtered}")
+        print(f"✗ Errors: {errors}")
+        print(f"📊 Total: {len(all_jobs)}")
         print(f"{'='*70}\n")
         
-        logging.info(f"Parallel scraping complete: {len(all_jobs)} unique jobs from {len(SEARCH_KEYWORDS)} keywords")
+        logging.info(f"Scraped {len(all_jobs)} today's jobs (PST)")
         
         return all_jobs
         
