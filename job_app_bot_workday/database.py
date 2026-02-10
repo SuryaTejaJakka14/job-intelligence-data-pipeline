@@ -1,6 +1,5 @@
 import pandas as pd
 import os
-import shutil
 from datetime import datetime
 import logging
 
@@ -225,37 +224,6 @@ def display_email_duplicates():
         print(f"Total duplicate applications: {int(email_counts.sum() - df['email'].nunique())}")
         print(f"Duplicate rate: {(len(df) - df['email'].nunique()) / len(df) * 100:.1f}%")
         print(f"{'='*70}\n")
-
-def backup_database():
-    """
-    Creates a timestamped backup of the CSV database.
-    """
-    if os.path.exists(CSV_FILE):
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_file = f"{CSV_FILE}.backup_{timestamp}"
-        shutil.copy(CSV_FILE, backup_file)
-        logging.info(f"Database backed up to {backup_file}")
-        print(f"✓ Database backed up to {backup_file}")
-    else:
-        logging.warning("No database file to backup.")
-        print("⚠ No database file to backup.")
-
-def reset_database():
-    """
-    Resets the database by deleting the CSV file and re-initializing it.
-    """
-    if os.path.exists(CSV_FILE):
-        backup_database() # Always backup before resetting
-        os.remove(CSV_FILE)
-        logging.info(f"Database file {CSV_FILE} removed.")
-        print(f"✓ Database file {CSV_FILE} removed.")
-    else:
-        logging.warning("No database file to reset.")
-        print("⚠ No database file to reset.")
-    
-    initialize_database()
-    logging.info("Database reset and re-initialized.")
-    print("✓ Database reset and re-initialized.")
 
 # Test function
 if __name__ == "__main__":
