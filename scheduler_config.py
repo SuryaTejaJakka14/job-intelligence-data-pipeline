@@ -31,8 +31,8 @@ SCHEDULE_INTERVAL_MINUTES = 30  # Run every 30 minutes
 
 # Time period configuration (working hours)
 # Set these to define when the bot should run
-START_TIME = dt_time(7,0,0)   # 9:00 AM - When to START running
-END_TIME = dt_time(15,0,0)    # 6:00 PM (18:00) - When to STOP running
+START_TIME = dt_time(9, 0, 0)   # 9:00 AM - When to START running
+END_TIME = dt_time(18, 0, 0)    # 6:00 PM - When to STOP running
 
 # Days to run on
 DAYS_TO_RUN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']  # Weekdays only
@@ -132,14 +132,41 @@ def schedule_bot(process_applications_func):
         print("⚠ Scheduling is DISABLED in config. Enable to use scheduling.")
         return
     
-    # Create wrapper function that checks working hours
+    # Create wrapper function that checks working hours and handles errors
     def scheduled_job():
-        if should_run_now():
-            print(f"\n🤖 [START] Running cycle at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            process_applications_func()
-            print(f"✓ [END] Cycle completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        else:
-            print(f"⊘ Outside working hours - skipping cycle at {datetime.now().strftime('%H:%M:%S')}")
+        """Wrapper with error handling to prevent crashes."""
+        try:
+            if should_run_now():
+                print(f"\n🤖 [START] Running cycle at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                
+                # Health check before running
+                try:
+                    from scraper_parallel import validate_chromedriver
+                    if not validate_chromedriver():
+                        logging.error("ChromeDriver health check failed - skipping this cycle")
+                        print("⚠ ChromeDriver validation failed - will retry on next schedule\n")
+                        return
+                except Exception as e:
+                    logging.error(f"Health check error: {str(e)}")
+                    print(f"⚠ Health check error - will retry on next schedule\n")
+                    return
+                
+                # Run the job with error handling
+                try:
+                    process_applications_func()
+                    print(f"✓ [END] Cycle completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                except Exception as e:
+                    logging.error(f"Error during application cycle: {str(e)}", exc_info=True)
+                    print(f"✗ [ERROR] Cycle failed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                    print(f"   Error: {str(e)}")
+                    print(f"   Will retry on next scheduled time\n")
+            else:
+                print(f"⊘ Outside working hours - skipping cycle at {datetime.now().strftime('%H:%M:%S')}")
+        
+        except Exception as e:
+            # Catch-all to prevent scheduler from crashing
+            logging.error(f"Critical error in scheduled job wrapper: {str(e)}", exc_info=True)
+            print(f"✗ Critical error: {str(e)}\n")
     
     # Schedule every X minutes
     schedule.every(SCHEDULE_INTERVAL_MINUTES).minutes.do(scheduled_job)
@@ -169,12 +196,12 @@ def schedule_bot(process_applications_func):
 # ============================================================
 
 def use_preset_business_hours():
-    """9 AM - 6 PM, Monday-Friday (default office hours)"""
+    """9 AM - 6 PM, Monday-Sunday (default office hours)"""
     global START_TIME, END_TIME, DAYS_TO_RUN
-    START_TIME = dt_time(7, 0)
-    END_TIME = dt_time(23, 59)
+    START_TIME = dt_time(9, 0)
+    END_TIME = dt_time(18, 0)
     DAYS_TO_RUN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    print("✓ Preset: Business Hours (9 AM - 6 PM, Mon-Fri)")
+    print("✓ Preset: Business Hours (9 AM - 6 PM, Mon-Sun)")
 
 def use_preset_extended_hours():
     """8 AM - 8 PM, Monday-Friday"""

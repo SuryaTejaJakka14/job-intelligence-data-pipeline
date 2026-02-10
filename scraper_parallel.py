@@ -99,70 +99,98 @@ def get_installed_chrome_version():
     logging.warning("Could not detect Chrome version")
     return None
 
-def update_chromedriver_automatically():
+def update_chromedriver_automatically(max_retries=3):
     """
     Automatically update ChromeDriver to match installed Chrome version.
-    Clears cache and downloads latest matching version.
+    Includes retry logic and exponential backoff for reliability.
+    
+    Args:
+        max_retries: Maximum number of retry attempts
+        
+    Returns:
+        bool: True if successful, False otherwise
     """
     print("\n" + "="*70)
     print("CHROMEDRIVER AUTO-UPDATE CHECK")
     print("="*70 + "\n")
     
-    try:
-        # Get installed Chrome version
-        chrome_version = get_installed_chrome_version()
-        
-        if not chrome_version:
-            print("⚠ Could not detect Chrome version - using default ChromeDriver")
-            logging.warning("Chrome version detection failed")
-            return False
-        
-        # Clear WebDriver Manager cache
-        print("🔄 Clearing ChromeDriver cache...")
-        wdm_cache = os.path.expanduser("~/.wdm")
-        if os.path.exists(wdm_cache):
-            import shutil
-            shutil.rmtree(wdm_cache)
-            logging.info("✓ Cleared WebDriver Manager cache")
-            print("✓ Cleared WebDriver Manager cache")
-        
-        # Download matching ChromeDriver
-        print(f"📥 Downloading ChromeDriver for Chrome {chrome_version}...")
-        manager = ChromeDriverManager()
-        driver_path = manager.install()
-        
-        logging.info(f"✓ ChromeDriver updated to {chrome_version}")
-        logging.info(f"✓ ChromeDriver path: {driver_path}")
-        print(f"✓ ChromeDriver updated successfully")
-        print(f"✓ ChromeDriver path: {driver_path}")
-        
-        # Fix permissions
+    for attempt in range(max_retries):
         try:
-            os.chmod(driver_path, 0o755)
-            logging.info("✓ Fixed ChromeDriver permissions")
-            print("✓ Fixed ChromeDriver permissions")
-        except:
-            pass
-        
-        # Remove quarantine (macOS)
-        try:
-            subprocess.run(['xattr', '-d', 'com.apple.quarantine', driver_path], check=False)
-            logging.info("✓ Removed macOS quarantine attribute")
-            print("✓ Removed macOS quarantine attribute")
-        except:
-            pass
-        
-        print("\n" + "="*70)
-        print("✓ CHROMEDRIVER AUTO-UPDATE COMPLETE")
-        print("="*70 + "\n")
-        
-        return True
-        
-    except Exception as e:
-        logging.error(f"✗ ChromeDriver update failed: {str(e)}")
-        print(f"✗ ChromeDriver update failed: {str(e)}")
-        print("  Falling back to default ChromeDriver\n")
-        return False
+            # Get installed Chrome version
+            chrome_version = get_installed_chrome_version()
+            
+            if not chrome_version:
+                print("⚠ Could not detect Chrome version - using cached ChromeDriver")
+                logging.warning("Chrome version detection failed")
+                return False
+            
+            # Only clear cache on first attempt to preserve fallback option
+            if attempt == 0:
+                print("🔄 Clearing ChromeDriver cache...")
+                wdm_cache = os.path.expanduser("~/.wdm")
+                if os.path.exists(wdm_cache):
+                    import shutil
+                    try:
+                        shutil.rmtree(wdm_cache)
+                        logging.info("✓ Cleared WebDriver Manager cache")
+                        print("✓ Cleared WebDriver Manager cache")
+                    except Exception as e:
+                        logging.warning(f"Could not clear cache: {e}")
+                        print(f"⚠ Could not clear cache, continuing...")
+            
+            # Download matching ChromeDriver
+            print(f"📥 Downloading ChromeDriver for Chrome {chrome_version}... (attempt {attempt + 1}/{max_retries})")
+            manager = ChromeDriverManager()
+            driver_path = manager.install()
+            
+            logging.info(f"✓ ChromeDriver updated to {chrome_version}")
+            logging.info(f"✓ ChromeDriver path: {driver_path}")
+            print(f"✓ ChromeDriver downloaded successfully")
+            print(f"✓ ChromeDriver path: {driver_path}")
+            
+            # Fix permissions (critical for macOS)
+            try:
+                os.chmod(driver_path, 0o755)
+                logging.info("✓ Fixed ChromeDriver permissions")
+                print("✓ Fixed ChromeDriver permissions")
+            except Exception as e:
+                logging.warning(f"Could not set permissions: {e}")
+            
+            # Remove quarantine (macOS security)
+            try:
+                result = subprocess.run(
+                    ['xattr', '-d', 'com.apple.quarantine', driver_path],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                if result.returncode == 0:
+                    logging.info("✓ Removed macOS quarantine attribute")
+                    print("✓ Removed macOS quarantine attribute")
+            except Exception as e:
+                logging.warning(f"Could not remove quarantine: {e}")
+            
+            print("\n" + "="*70)
+            print("✓ CHROMEDRIVER AUTO-UPDATE COMPLETE")
+            print("="*70 + "\n")
+            
+            return True
+            
+        except Exception as e:
+            logging.error(f"✗ ChromeDriver update failed (attempt {attempt + 1}/{max_retries}): {str(e)}")
+            print(f"✗ Update failed (attempt {attempt + 1}/{max_retries}): {str(e)}")
+            
+            if attempt < max_retries - 1:
+                # Exponential backoff: 2, 4, 8 seconds
+                wait_time = 2 ** (attempt + 1)
+                print(f"  Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                print("  All retries exhausted - using cached ChromeDriver\n")
+                logging.warning("ChromeDriver update failed after all retries, using cached version")
+                return False
+    
+    return False
 
 def get_chrome_service():
     """Get or create Chrome service (thread-safe singleton)."""
@@ -182,7 +210,18 @@ def get_chrome_service():
     return CHROME_SERVICE
 
 def setup_driver(max_retries=3):
-    """Set up Chrome WebDriver with retry logic."""
+    """
+    Set up Chrome WebDriver with retry logic and exponential backoff.
+    
+    Args:
+        max_retries: Maximum number of retry attempts
+        
+    Returns:
+        WebDriver instance
+        
+    Raises:
+        Exception if all retries fail
+    """
     for attempt in range(max_retries):
         try:
             chrome_options = Options()
@@ -190,23 +229,67 @@ def setup_driver(max_retries=3):
             if HEADLESS_BROWSER:
                 chrome_options.add_argument('--headless=new')
             
+            # Stability options
             chrome_options.add_argument('--no-sandbox')
             chrome_options.add_argument('--disable-dev-shm-usage')
             chrome_options.add_argument('--disable-gpu')
+            chrome_options.add_argument('--disable-extensions')
+            chrome_options.add_argument('--disable-software-rasterizer')
             chrome_options.add_argument(f'user-agent={USER_AGENT}')
+            
+            # Prevent crashes
+            chrome_options.add_argument('--disable-crash-reporter')
+            chrome_options.add_argument('--disable-in-process-stack-traces')
             
             service = get_chrome_service()
             driver = webdriver.Chrome(service=service, options=chrome_options)
             
-            logging.info(f"✓ WebDriver created (attempt {attempt + 1})")
+            logging.info(f"✓ WebDriver created successfully (attempt {attempt + 1})")
             return driver
             
         except Exception as e:
-            logging.error(f"✗ Driver setup failed: {str(e)}")
+            logging.error(f"✗ Driver setup failed (attempt {attempt + 1}/{max_retries}): {str(e)}")
+            
             if attempt < max_retries - 1:
-                time.sleep(2)
+                # Exponential backoff: 2, 4, 8 seconds
+                wait_time = 2 ** (attempt + 1)
+                logging.info(f"Retrying driver setup in {wait_time} seconds...")
+                time.sleep(wait_time)
             else:
+                logging.error("All driver setup retries exhausted")
                 raise
+
+def validate_chromedriver():
+    """
+    Validate ChromeDriver by attempting to create and use a driver.
+    Used as a health check before starting scheduled jobs.
+    
+    Returns:
+        bool: True if ChromeDriver is working, False otherwise
+    """
+    driver = None
+    try:
+        logging.info("Running ChromeDriver health check...")
+        print("\n🔍 Running ChromeDriver health check...")
+        
+        driver = setup_driver(max_retries=2)
+        driver.get("about:blank")
+        
+        logging.info("✓ ChromeDriver health check passed")
+        print("✓ ChromeDriver health check passed\n")
+        return True
+        
+    except Exception as e:
+        logging.error(f"✗ ChromeDriver health check failed: {str(e)}")
+        print(f"✗ ChromeDriver health check failed: {str(e)}\n")
+        return False
+        
+    finally:
+        if driver:
+            try:
+                driver.quit()
+            except:
+                pass
 
 def convert_ist_to_pst(ist_time_str):
     """Convert IST timestamp to PST."""
@@ -222,14 +305,29 @@ def convert_ist_to_pst(ist_time_str):
         return None
 
 def is_today_pst_job(ist_time_str):
-    """Check if job was posted today (in PST)."""
+    """
+    Check if job was posted today in PST (current day only).
+    
+    Jobs are filtered strictly by the current PST date.
+    Only jobs posted on today's date in PST will be accepted.
+    """
     pst_dt = convert_ist_to_pst(ist_time_str)
     
     if not pst_dt:
         return False
     
     today_pst = datetime.now(PST).date()
-    return pst_dt.date() == today_pst
+    job_date_pst = pst_dt.date()
+    
+    # Accept jobs from today only in PST
+    is_today = job_date_pst == today_pst
+    
+    if is_today:
+        logging.info(f"✓ Job timestamp '{ist_time_str}' → PST: {pst_dt.strftime('%Y-%m-%d %I:%M %p')} - ACCEPTED")
+    else:
+        logging.info(f"✗ Job timestamp '{ist_time_str}' → PST: {pst_dt.strftime('%Y-%m-%d %I:%M %p')} - FILTERED (not today)")
+    
+    return is_today
 
 def extract_email(text):
     """Extract email address from text."""
@@ -408,12 +506,15 @@ def scrape_jobs_parallel(unused_url=None, max_workers=None):
         # ============================================================
         update_chromedriver_automatically()
         
+        today_pst = datetime.now(PST).date()
+        
         print(f"\n{'='*70}")
-        print(f"AUTOMATED JOB SEARCH BOT - PARALLEL MODE")
+        print(f"AUTOMATED JOB SEARCH BOT - PARALLEL MODE WITH DATE FILTERING")
         print(f"{'='*70}")
         print(f"Search Keywords: {SEARCH_KEYWORDS}")
         print(f"Max Workers: {max_workers}")
         print(f"Headless Mode: {HEADLESS_BROWSER}")
+        print(f"Today (PST): {today_pst}")
         print(f"{'='*70}\n")
         
         # ============================================================
@@ -440,30 +541,64 @@ def scrape_jobs_parallel(unused_url=None, max_workers=None):
                 time.sleep(2)
                 soup = BeautifulSoup(driver.page_source, 'html.parser')
                 
-                # Extract job URLs from search results
+                # ============================================================
+                # EXTRACT JOB URLs WITH DATE FILTERING
+                # ============================================================
                 job_urls = []
-                links = soup.find_all('a', href=re.compile(r'job_details'))
+                today_job_urls = []
                 
-                for link in links:
-                    href = link.get('href')
-                    if href:
-                        if href.startswith('job_details'):
-                            full_url = f"https://jobs.nvoids.com/{href}"
-                        elif href.startswith('/'):
-                            full_url = f"https://jobs.nvoids.com{href}"
-                        else:
-                            full_url = href
-                        
-                        if full_url not in job_urls:
-                            job_urls.append(full_url)
-                
-                print(f"   Found {len(job_urls)} job postings for '{search_keyword}'")
-                
-                if not job_urls:
-                    print(f"   No jobs found for this keyword")
+                # Find the job table (usually the second table on the page)
+                tables = soup.find_all('table')
+                if len(tables) < 2:
+                    print(f"   ✗ Job table not found")
                     driver.quit()
                     driver = None
                     continue
+                
+                job_table = tables[1] if len(tables) > 1 else tables[0]
+                rows = job_table.find_all('tr')
+                
+                print(f"   Found {len(rows)-1} job listings")
+                
+                # Parse each row to extract URL and timestamp
+                for row_idx, row in enumerate(rows[1:], 1):  # Skip header row
+                    cells = row.find_all('td')
+                    
+                    if len(cells) < 3:
+                        continue
+                    
+                    # Last cell contains the timestamp
+                    timestamp_cell = cells[-1].get_text(strip=True)
+                    
+                    # Check if job was posted today (in PST)
+                    if not is_today_pst_job(timestamp_cell):
+                        continue
+                    
+                    # Extract job URL from the row
+                    links = row.find_all('a', href=re.compile(r'job_details'))
+                    
+                    for link in links:
+                        href = link.get('href')
+                        if href:
+                            if href.startswith('job_details'):
+                                full_url = f"https://jobs.nvoids.com/{href}"
+                            elif href.startswith('/'):
+                                full_url = f"https://jobs.nvoids.com{href}"
+                            else:
+                                full_url = href
+                            
+                            if full_url not in today_job_urls:
+                                today_job_urls.append(full_url)
+                
+                print(f"   ✓ Filtered to {len(today_job_urls)} recent jobs (posted today in PST)")
+                
+                if not today_job_urls:
+                    print(f"   No jobs posted today for this keyword")
+                    driver.quit()
+                    driver = None
+                    continue
+                
+                job_urls = today_job_urls
                 
                 # Close the search browser
                 driver.quit()
@@ -535,12 +670,12 @@ def test_parallel_scraper():
     """Test the parallel scraper."""
     jobs = scrape_jobs_parallel()
     if jobs:
-        print(f"\n✅ Found {len(jobs)} jobs for today (PST):\n")
+        print(f"\n✅ Found {len(jobs)} recent jobs:\n")
         for idx, job in enumerate(jobs[:5], 1):
             print(f"[{idx}] {job['title']}")
             print(f"    📧 {job['email']}\n")
     else:
-        print("\n⚠ No jobs found for today (PST)")
+        print("\n⚠ No recent jobs found")
 
 if __name__ == "__main__":
     test_parallel_scraper()

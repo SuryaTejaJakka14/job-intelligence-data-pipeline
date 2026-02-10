@@ -70,14 +70,29 @@ def process_applications_parallel(max_workers=3):
     applied_emails = set(df_applied['email'].str.lower())
     applied_job_ids = set(df_applied['job_id'])
     
-    # Filter jobs
+    # Filter jobs - also track emails within this cycle
     filtered_jobs = []
+    emails_in_current_cycle = set()  # Track emails being sent in THIS cycle
+    
     for job in jobs:
+        job_email_lower = job['email'].lower()
+        
+        # Skip if already applied (from CSV)
         if job['job_id'] in applied_job_ids:
             continue
-        if job['email'].lower() in applied_emails:
+        
+        # Skip if already contacted (from CSV)
+        if job_email_lower in applied_emails:
             continue
+        
+        # Skip if already added in this cycle (NEW CHECK)
+        if job_email_lower in emails_in_current_cycle:
+            print(f"⊘ Skipping duplicate email in current cycle: {job['email']} - {job['title'][:40]}...")
+            continue
+        
+        # Add to filtered list and mark email as used in this cycle
         filtered_jobs.append(job)
+        emails_in_current_cycle.add(job_email_lower)
     
     print(f"After deduplication: {len(filtered_jobs)} unique applications\n")
     

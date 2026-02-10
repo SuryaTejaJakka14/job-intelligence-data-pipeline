@@ -44,97 +44,126 @@ logging.basicConfig(
 def process_applications_parallel(max_workers=3):
     """
     Main job application workflow using PARALLEL scraping.
+    Includes comprehensive error handling to prevent crashes.
     
     Args:
         max_workers (int): Number of parallel threads (3-5 recommended)
     """
-    print(f"\n{'='*70}")
-    print(f"Job Application Bot - PARALLEL MODE")
-    print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"Mode: {'DRY RUN' if DRY_RUN else 'LIVE'}")
-    print(f"Parallel Workers: {max_workers}")
-    print(f"{'='*70}\n")
-    
-    logging.info("Starting new application cycle (PARALLEL)")
-    initialize_database()
-    
-    today_count = get_todays_application_count()
-    if today_count >= MAX_APPLICATIONS_PER_DAY:
-        print(f"⚠ Daily limit reached ({today_count}/{MAX_APPLICATIONS_PER_DAY})")
-        print(f"Will reset at midnight.")
-        return
-    
-    print(f"Applications sent today: {today_count}/{MAX_APPLICATIONS_PER_DAY}\n")
-    
-    # ============================================================
-    # PARALLEL SCRAPING HERE
-    # ============================================================
-    print("🔍 Starting parallel job search...\n")
-    start_time = time.time()
-    
-    jobs = scrape_jobs_parallel(None, max_workers=max_workers)
-    
-    scrape_time = time.time() - start_time
-    print(f"\n⏱ Scraping completed in {scrape_time:.1f} seconds")
-    
-    # Load applied jobs for deduplication
-    print("\nLoading application history for deduplication...")
-    df_applied = pd.read_csv('applied_jobs.csv')
-    applied_emails = set(df_applied['email'].str.lower())
-    applied_job_ids = set(df_applied['job_id'])
-    
-    # Filter jobs
-    filtered_jobs = []
-    for job in jobs:
-        if job['job_id'] in applied_job_ids:
-            continue
-        if job['email'].lower() in applied_emails:
-            continue
-        filtered_jobs.append(job)
-    
-    print(f"After deduplication: {len(filtered_jobs)} unique applications\n")
-    
-    total_applied = 0
-    
-    # ============================================================
-    # Send applications (sequential - unavoidable)
-    # ============================================================
-    print("📧 Sending applications...\n")
-    
-    for job in filtered_jobs:
-        if get_todays_application_count() >= MAX_APPLICATIONS_PER_DAY:
-            print(f"\n⚠ Daily limit reached during cycle ({MAX_APPLICATIONS_PER_DAY})")
-            print(f"Will resume at next scheduled time or after midnight reset.")
-            break
+    try:
+        print(f"\n{'='*70}")
+        print(f"Job Application Bot - PARALLEL MODE")
+        print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"Mode: {'DRY RUN' if DRY_RUN else 'LIVE'}")
+        print(f"Parallel Workers: {max_workers}")
+        print(f"{'='*70}\n")
         
-        print(f"→ {job['title'][:50]}")
-        success = send_application(job['title'], job['company'], job['email'])
-        record_application(job['job_id'], job['title'], job['company'], job['email'])
+        logging.info("Starting new application cycle (PARALLEL)")
+        initialize_database()
         
-        if success:
-            total_applied += 1
+        today_count = get_todays_application_count()
+        if today_count >= MAX_APPLICATIONS_PER_DAY:
+            print(f"⚠ Daily limit reached ({today_count}/{MAX_APPLICATIONS_PER_DAY})")
+            print(f"Will reset at midnight.")
+            return
         
-        time.sleep(DELAY_BETWEEN_EMAILS)
+        print(f"Applications sent today: {today_count}/{MAX_APPLICATIONS_PER_DAY}\n")
+        
+        # ============================================================
+        # PARALLEL SCRAPING HERE
+        # ============================================================
+        print("🔍 Starting parallel job search...\n")
+        start_time = time.time()
+        
+        jobs = scrape_jobs_parallel(None, max_workers=max_workers)
+        
+        scrape_time = time.time() - start_time
+        print(f"\n⏱ Scraping completed in {scrape_time:.1f} seconds")
+        
+        # Load applied jobs for deduplication
+        print("\nLoading application history for deduplication...")
+        df_applied = pd.read_csv('applied_jobs.csv')
+        applied_emails = set(df_applied['email'].str.lower())
+        applied_job_ids = set(df_applied['job_id'])
+        
+        # Filter jobs - also track emails within this cycle
+        filtered_jobs = []
+        emails_in_current_cycle = set()  # Track emails being sent in THIS cycle
+        
+        for job in jobs:
+            job_email_lower = job['email'].lower()
+            
+            # Skip if already applied (from CSV)
+            if job['job_id'] in applied_job_ids:
+                continue
+            
+            # Skip if already contacted (from CSV)
+            if job_email_lower in applied_emails:
+                continue
+            
+            # Skip if already added in this cycle (NEW CHECK)
+            if job_email_lower in emails_in_current_cycle:
+                print(f"⊘ Skipping duplicate email in current cycle: {job['email']} - {job['title'][:40]}...")
+                continue
+            
+            # Add to filtered list and mark email as used in this cycle
+            filtered_jobs.append(job)
+            emails_in_current_cycle.add(job_email_lower)
+        
+        print(f"After deduplication: {len(filtered_jobs)} unique applications\n")
+        
+        total_applied = 0
+        
+        # ============================================================
+        # Send applications (sequential - unavoidable)
+        # ============================================================
+        print("📧 Sending applications...\n")
+        
+        for job in filtered_jobs:
+            if get_todays_application_count() >= MAX_APPLICATIONS_PER_DAY:
+                print(f"\n⚠ Daily limit reached during cycle ({MAX_APPLICATIONS_PER_DAY})")
+                print(f"Will resume at next scheduled time or after midnight reset.")
+                break
+            
+            print(f"→ {job['title'][:50]}")
+            success = send_application(job['title'], job['company'], job['email'])
+            record_application(job['job_id'], job['title'], job['company'], job['email'])
+            
+            if success:
+                total_applied += 1
+            
+            time.sleep(DELAY_BETWEEN_EMAILS)
+        
+        # Summary
+        print(f"\n{'='*70}")
+        print(f"Cycle Complete")
+        print(f"{'='*70}")
+        print(f"Jobs found: {len(jobs)}")
+        print(f"Unique jobs: {len(filtered_jobs)}")
+        print(f"Applications sent: {total_applied}")
+        print(f"Scraping time: {scrape_time:.1f} seconds")
+        
+        # Overall statistics
+        stats = get_application_stats()
+        print(f"\nOverall Statistics (All Time):")
+        print(f"  Total applications: {stats['total']}")
+        print(f"  Successfully sent: {stats['sent']}")
+        print(f"  Failed: {stats['failed']}")
+        print(f"  Unique emails contacted: {stats['unique_emails']}")
+        print(f"{'='*70}\n")
+        
+        logging.info(f"Parallel cycle complete: {total_applied} sent in {scrape_time:.1f}s scrape time")
     
-    # Summary
-    print(f"\n{'='*70}")
-    print(f"Cycle Complete")
-    print(f"{'='*70}")
-    print(f"Jobs found: {len(jobs)}")
-    print(f"Unique jobs: {len(filtered_jobs)}")
-    print(f"Applications sent: {total_applied}")
-    print(f"Scraping time: {scrape_time:.1f} seconds")
-    
-    # Overall statistics
-    stats = get_application_stats()
-    print(f"\nOverall Statistics (All Time):")
-    print(f"  Total applications: {stats['total']}")
-    print(f"  Successfully sent: {stats['sent']}")
-    print(f"  Failed: {stats['failed']}")
-    print(f"  Unique emails contacted: {stats['unique_emails']}")
-    print(f"{'='*70}\n")
-    
-    logging.info(f"Parallel cycle complete: {total_applied} sent in {scrape_time:.1f}s scrape time")
+    except Exception as e:
+        # Comprehensive error logging
+        logging.error(f"Critical error in process_applications_parallel: {str(e)}", exc_info=True)
+        print(f"\n{'='*70}")
+        print(f"✗ ERROR: Application cycle failed")
+        print(f"{'='*70}")
+        print(f"Error: {str(e)}")
+        print(f"Check logs/app.log for details")
+        print(f"Bot will retry on next scheduled interval")
+        print(f"{'='*70}\n")
+        raise  # Re-raise to let scheduler handle it
 
 def run_once_parallel():
     """Run once with parallel scraping (for testing)."""

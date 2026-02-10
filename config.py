@@ -10,15 +10,15 @@ import os
 # ============================================================
 
 # Gmail credentials
-SENDER_EMAIL = "surya.jakka14@gmail.com"
-SENDER_PASSWORD = "szvalslnccosmclt"  # ← UPDATE THIS
+SENDER_EMAIL = "stjakka14@gmail.com"
+SENDER_PASSWORD = "cugkvqktmxexioim"  # ← UPDATE THIS
 
 # ============================================================
 # RESUME CONFIGURATION
 # ============================================================
 
 # Path to your resume file
-RESUME_PATH = "/Users/suryatejajakka/desktop/marketing_workday/Surya_Workday.docx"  # ← UPDATE THIS
+RESUME_PATH = "/Users/suryatejajakka/desktop/marketing_workday/marketing_java/Surya_Java.docx"  # ← UPDATE THIS
 
 # ============================================================
 # APPLICATION LIMITS
@@ -60,7 +60,7 @@ MAX_PAGES_TO_SCRAPE = 5
 # ============================================================
 
 # Keywords to search for jobs
-SEARCH_KEYWORDS = ['workday']
+SEARCH_KEYWORDS = ['java', 'java developer']
 
 # Maximum pages to scrape per search keyword
 MAX_PAGES_PER_SEARCH = 5
@@ -71,15 +71,14 @@ MAX_PAGES_PER_SEARCH = 5
 
 # Keywords to look for in job titles (leave empty [] to disable filtering)
 TARGET_KEYWORDS = [
-    'workday',
-    'consultant',
+    'java',
     'developer',
     'engineer',
-    'hcm',
-    'integration',
+    'software',
+    'full stack',
+    'backend',
     'senior',
-    'lead',
-    'architect'
+    'lead'
 ]
 
 # Keywords to exclude from job titles
