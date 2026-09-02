@@ -10,15 +10,15 @@ import os
 # ============================================================
 
 # Gmail credentials
-SENDER_EMAIL = "stjakka14@gmail.com"
-SENDER_PASSWORD = "cugkvqktmxexioim"  # ← UPDATE THIS
+SENDER_EMAIL = "Add you email"
+SENDER_PASSWORD = "Enter Google passkey"  # ← UPDATE THIS
 
 # ============================================================
 # RESUME CONFIGURATION
 # ============================================================
 
 # Path to your resume file
-RESUME_PATH = "/Users/suryatejajakka/desktop/marketing_workday/marketing_java/Surya_Java.docx"  # ← UPDATE THIS
+RESUME_PATH = "File path"  # ← UPDATE THIS
 
 # ============================================================
 # APPLICATION LIMITS
@@ -60,7 +60,7 @@ MAX_PAGES_TO_SCRAPE = 5
 # ============================================================
 
 # Keywords to search for jobs
-SEARCH_KEYWORDS = ['java', 'java developer']
+SEARCH_KEYWORDS = ['Enter the keyworkds that you searching for']
 
 # Maximum pages to scrape per search keyword
 MAX_PAGES_PER_SEARCH = 5
