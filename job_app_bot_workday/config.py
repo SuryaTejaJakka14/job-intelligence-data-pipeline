@@ -10,15 +10,15 @@ import os
 # ============================================================
 
 # Gmail credentials
-SENDER_EMAIL = "stjakka14@gmail.com"
-SENDER_PASSWORD = "cugkvqktmxexioim"  # ← UPDATE THIS
+SENDER_EMAIL = ""
+SENDER_PASSWORD = ""  # ← UPDATE THIS
 
 # ============================================================
 # RESUME CONFIGURATION
 # ============================================================
 
 # Path to your resume file (UPDATE THIS TO YOUR WORKDAY RESUME)
-RESUME_PATH = "/Users/suryatejajakka/desktop/marketing_workday/Surya_Workday.docx"  # ← UPDATE THIS
+RESUME_PATH = ""  # ← UPDATE THIS
 
 # ============================================================
 # APPLICATION LIMITS
@@ -82,8 +82,6 @@ MAX_PAGES_PER_SEARCH = 5
 #   - Can use broader keywords since search already narrows results
 #
 TARGET_KEYWORDS = [
-    'workday',      # Primary keyword - most jobs should have this
-    'hcm',          # Workday HCM
     # Note: Generic keywords like 'developer', 'consultant' are removed
     # to avoid matching non-Workday jobs in parallel scraper
 ]
