@@ -4,7 +4,6 @@ A scheduled Python pipeline that collects job listings, processes them in parall
 
 This project was built as a practical data-engineering and automation system for turning unstructured job-listing inputs into a searchable, trackable workflow. It demonstrates scheduled orchestration, concurrent processing, data-quality controls, database persistence, and reporting.
 
-> **Portfolio note:** This public repository should use only synthetic sample data. Do not commit personal application records, recruiter contact details, credentials, browser profiles, or copied job-site content.
 
 ## Highlights
 
